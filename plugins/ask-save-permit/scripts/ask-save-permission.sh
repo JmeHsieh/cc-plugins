@@ -1,5 +1,5 @@
 #!/bin/bash
-# ask-save-permit.sh
+# ask-save-permission.sh
 # PreToolUse hook: asks user whether to permanently save
 # a permission grant to ~/.claude/settings.json.
 #
@@ -13,11 +13,47 @@ INPUT=$(cat)
 
 python3 - "$INPUT" "$SETTINGS_FILE" << 'PYTHON_SCRIPT'
 import json
+import re
 import subprocess
 import sys
 import os
 import fnmatch
 from pathlib import Path
+
+
+# Risk levels
+SAFE = "safe"      # 🟢 read-only operations
+ALERT = "alert"    # 🟡 file modifications, network, general bash
+DANGER = "danger"  # 🔴 destructive bash commands
+
+RISK_EMOJI = {
+    SAFE: "\U0001F7E2",    # 🟢
+    ALERT: "\U0001F7E1",   # 🟡
+    DANGER: "\U0001F534",  # 🔴
+}
+
+RISK_LABEL = {
+    SAFE: "Safe",
+    ALERT: "Alert",
+    DANGER: "Danger",
+}
+
+# Patterns that make a Bash command dangerous
+DANGER_PATTERNS = [
+    # Direct destructive commands (first word)
+    r"^(rm|rmdir|kill|killall|pkill|mkfs|dd"
+    r"|shutdown|reboot)\b",
+    # Git destructive
+    r"\bgit\s+push\b",
+    r"\bgit\s+reset\s+--hard\b",
+    r"\bgit\s+clean\s+-f\b",
+    r"\bgit\s+branch\s+-D\b",
+    # DB destructive
+    r"\b(drop|truncate)\s+",
+    r"\bdelete\s+from\s+",
+]
+
+SAFE_TOOLS = {"Read", "Glob", "Grep"}
 
 
 def build_group_permission(
@@ -145,54 +181,83 @@ def output_decision(decision: str, reason: str = "") -> None:
     print(json.dumps(result))
 
 
+def classify_risk(
+    tool_name: str,
+    tool_input: dict,
+) -> str:
+    """Classify operation risk level."""
+    if tool_name in SAFE_TOOLS:
+        return SAFE
+
+    if tool_name == "Bash":
+        cmd = tool_input.get("command", "").strip()
+        for pattern in DANGER_PATTERNS:
+            if re.search(pattern, cmd, re.IGNORECASE):
+                return DANGER
+
+    # Edit, Write, WebFetch, non-dangerous Bash
+    return ALERT
+
+
+def build_display(
+    tool_name: str,
+    tool_input: dict,
+) -> str:
+    """Build a human-readable display string."""
+    if tool_name == "Bash":
+        cmd = tool_input.get("command", tool_name)
+        return cmd if len(cmd) <= 80 else cmd[:77] + "..."
+    if tool_name in ("Edit", "Write", "Read"):
+        fp = tool_input.get("file_path", "")
+        return f"{tool_name}({fp})" if fp else tool_name
+    if tool_name == "WebFetch":
+        url = tool_input.get("url", "")
+        return f"WebFetch({url})" if url else "WebFetch"
+    return tool_name
+
+
 def prompt_user(
     tool_name: str,
     group_perm: str | None,
     tool_input: dict,
 ) -> str:
-    """Prompt user via macOS osascript dialog."""
-    # Build display string
-    if tool_name == "Bash":
-        cmd = tool_input.get("command", tool_name)
-        # Truncate long commands for dialog display
-        display = cmd if len(cmd) <= 80 else cmd[:77] + "..."
-    elif tool_name in ("Edit", "Write", "Read"):
-        fp = tool_input.get("file_path", "")
-        display = f"{tool_name}({fp})" if fp else tool_name
-    elif tool_name == "WebFetch":
-        url = tool_input.get("url", "")
-        display = f"WebFetch({url})" if url else "WebFetch"
-    else:
-        display = tool_name
-
-    # Build option list
-    if group_perm is None:
-        options = [
-            f"1) Allow ALL '{tool_name}'",
-            "2) No, ask me this time",
-        ]
-        default = options[-1]
-    else:
-        options = [
-            f"1) Allow ALL '{tool_name}'",
-            f"2) Allow: {group_perm}",
-            "3) No, ask me this time",
-        ]
-        default = options[-1]
-
-    # Escape for AppleScript
+    """Prompt user via macOS display dialog."""
+    risk = classify_risk(tool_name, tool_input)
+    emoji = RISK_EMOJI[risk]
+    label = RISK_LABEL[risk]
+    display = build_display(tool_name, tool_input)
     display_escaped = display.replace('"', '\\"')
-    items = ", ".join(
-        f'"{o.replace(chr(34), chr(92) + chr(34))}"'
-        for o in options
+
+    prompt = (
+        f"{emoji} {label}\\n\\n"
+        f"Tool: {display_escaped}\\n\\n"
+        f"Save this permission?"
     )
 
-    script = (
-        f'choose from list {{{items}}} '
-        f'with prompt "Save Permission?\\n\\n'
-        f'Tool: {display_escaped}" '
-        f'default items {{"{default}"}}'
-    )
+    if risk == DANGER:
+        # No allow buttons for danger operations
+        script = (
+            f'display dialog "{prompt}" '
+            f'buttons {{"Ask me this time"}} '
+            f'default button "Ask me this time"'
+        )
+    elif group_perm is None:
+        # No meaningful group: 2 buttons
+        script = (
+            f'display dialog "{prompt}" '
+            f'buttons {{"Allow ALL {tool_name}",'
+            f' "Ask me this time"}} '
+            f'default button "Ask me this time"'
+        )
+    else:
+        group_escaped = group_perm.replace('"', '\\"')
+        script = (
+            f'display dialog "{prompt}" '
+            f'buttons {{"Allow ALL {tool_name}",'
+            f' "Allow {group_escaped}",'
+            f' "Ask me this time"}} '
+            f'default button "Ask me this time"'
+        )
 
     result = subprocess.run(
         ["osascript", "-e", script],
@@ -200,11 +265,11 @@ def prompt_user(
         text=True,
     )
 
-    choice = result.stdout.strip()
+    output = result.stdout.strip()
 
-    if choice.startswith("1)"):
+    if "Allow ALL" in output:
         return "all"
-    elif choice.startswith("2)") and group_perm is not None:
+    elif "Allow " in output and group_perm is not None:
         return "group"
     return "skip"
 
