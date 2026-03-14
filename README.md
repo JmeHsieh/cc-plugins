@@ -28,7 +28,7 @@ cp -r arc-conduit /path/to/your/project/.claude/skills/
 The expected path after installation:
 
 ```
-your-project/
+your-home/
 └── .claude/
     └── skills/
         └── arc-conduit/
