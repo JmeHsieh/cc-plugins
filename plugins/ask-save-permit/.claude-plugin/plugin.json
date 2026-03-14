@@ -1,0 +1,8 @@
+{
+  "name": "ask-save-permit",
+  "description": "Auto-prompt to save tool permissions to settings.json via macOS dialog",
+  "version": "1.0.0",
+  "author": {
+    "name": "Yuan"
+  }
+}

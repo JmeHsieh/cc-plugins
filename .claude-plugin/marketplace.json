@@ -1,0 +1,18 @@
+{
+  "name": "jo-yuan",
+  "owner": {
+    "name": "Yuan"
+  },
+  "plugins": [
+    {
+      "name": "arc-conduit",
+      "source": "./plugins/arc-conduit",
+      "description": "Query and manage Phabricator via arc CLI and Conduit API"
+    },
+    {
+      "name": "ask-save-permit",
+      "source": "./plugins/ask-save-permit",
+      "description": "Auto-prompt to save tool permissions to settings.json"
+    }
+  ]
+}

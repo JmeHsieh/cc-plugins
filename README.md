@@ -1,40 +1,50 @@
-# Agent Skills
+# cc-plugins
 
-A collection of [Claude Code skills](https://docs.anthropic.com/en/docs/claude-code/skills)
-for enhancing AI agent workflows.
+A [Claude Code plugin marketplace](https://docs.anthropic.com/en/docs/claude-code/plugins)
+for personal tools, skills, and hooks.
 
-## Available Skills
+Marketplace name: `jo-yuan`
+
+## Plugins
 
 ### arc-conduit
 
 Query and manage Phabricator via `arc` CLI and
 Conduit API — tasks, diffs, repos, users, and more.
 
-**Prerequisites:**
-- [Arcanist](https://secure.phabricator.com/book/phabricator/article/arcanist/)
-  (`arc`) installed and configured
-- `.arcconfig` in your project root pointing to
-  your Phabricator instance
+### ask-save-permit
 
-**Installation:**
+PreToolUse hook that prompts (via macOS dialog)
+whether to permanently save a permission grant
+to `~/.claude/settings.json`.
 
-Copy the skill directory into your project's
-`.claude/skills/`:
+## Installation
 
-```bash
-cp -r arc-conduit /path/to/your/project/.claude/skills/
+Register this marketplace in your
+`~/.claude/settings.json`:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "jo-yuan": {
+      "source": {
+        "source": "github",
+        "repo": "yuan/cc-plugins"
+      }
+    }
+  }
+}
 ```
 
-The expected path after installation:
+Then enable plugins:
 
-```
-your-home/
-└── .claude/
-    └── skills/
-        └── arc-conduit/
-            ├── SKILL.md
-            └── references/
-                └── conduit_api.md
+```json
+{
+  "enabledPlugins": {
+    "arc-conduit@jo-yuan": true,
+    "ask-save-permit@jo-yuan": true
+  }
+}
 ```
 
 ## License

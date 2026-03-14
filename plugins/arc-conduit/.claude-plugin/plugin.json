@@ -1,0 +1,8 @@
+{
+  "name": "arc-conduit",
+  "description": "Query and manage Phabricator via arc CLI and Conduit API",
+  "version": "1.0.0",
+  "author": {
+    "name": "Yuan"
+  }
+}
